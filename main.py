@@ -1002,21 +1002,16 @@ def time_until_range_ms(pos: int, velocity_px_per_sec: float, left: int, right: 
 # ============================================================
 
 def wt_detect_target(cfg: BotConfig, sct: mss.mss) -> Optional[Tuple[int, int]]:
-    """Erkennt rote Ziele im Scan-Bereich und gibt den Mittelpunkt zurueck."""
-    w = cfg.wt_scan_x2 - cfg.wt_scan_x1
-    h = cfg.wt_scan_y2 - cfg.wt_scan_y1
-    if w < 10 or h < 10:
-        return None
-
+    """Erkennt rote Ziele auf dem gesamten Bildschirm und gibt den Mittelpunkt zurueck."""
     try:
         mon = sct.monitors[cfg.monitor_index]
     except (IndexError, KeyError):
         mon = sct.monitors[1]
     region = {
-        "left": cfg.wt_scan_x1 + mon.get("left", 0),
-        "top": cfg.wt_scan_y1 + mon.get("top", 0),
-        "width": w,
-        "height": h,
+        "left": mon.get("left", 0),
+        "top": mon.get("top", 0),
+        "width": mon.get("width", cfg.screen_w),
+        "height": mon.get("height", cfg.screen_h),
     }
     try:
         raw = np.array(sct.grab(region))
@@ -1060,8 +1055,8 @@ def wt_detect_target(cfg: BotConfig, sct: mss.mss) -> Optional[Tuple[int, int]]:
     cx = int(M["m10"] / M["m00"])
     cy = int(M["m01"] / M["m00"])
 
-    abs_x = cfg.wt_scan_x1 + cx
-    abs_y = cfg.wt_scan_y1 + cy
+    abs_x = cx
+    abs_y = cy
     return (abs_x, abs_y)
 
 
@@ -1078,14 +1073,7 @@ def wt_move_and_shoot(cfg: BotConfig, target_x: int, target_y: int) -> float:
     if cfg.wt_aim_settle_ms > 0:
         time.sleep(cfg.wt_aim_settle_ms / 1000.0)
 
-    try:
-        down_start = time.perf_counter()
-        pydirectinput.click()
-        click_ms = (time.perf_counter() - down_start) * 1000.0
-        return click_ms
-    except (AttributeError, TypeError):
-        pass
-    return 0.0
+    return _right_click_hold(cfg.wt_shot_hold_ms)
 
 
 def wt_loop(state: BotState) -> None:

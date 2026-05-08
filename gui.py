@@ -151,6 +151,41 @@ def save_license(code: str) -> None:
         pass
 
 
+def _license_registry_path() -> str:
+    return os.path.join(botcore._app_dir(), "license_registry.json")
+
+
+def load_license_registry() -> list:
+    try:
+        with open(_license_registry_path(), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def save_license_registry(registry: list) -> None:
+    try:
+        os.makedirs(os.path.dirname(_license_registry_path()), exist_ok=True)
+        with open(_license_registry_path(), "w", encoding="utf-8") as f:
+            json.dump(registry, f, indent=2, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def register_license(code: str, hwid: str, hours: int) -> None:
+    registry = load_license_registry()
+    entry = {
+        "code": code,
+        "hwid": hwid,
+        "hours": hours,
+        "created_at": time.time(),
+        "created_str": _dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "expiry_str": (_dt.datetime.now() + _dt.timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M"),
+    }
+    registry.append(entry)
+    save_license_registry(registry)
+
+
 def _make_galaxy_image(width: int, height: int, accent: str) -> Image.Image:
     rng = random.Random(44)
     img = Image.new("RGB", (width, height), BG)
@@ -350,52 +385,192 @@ class AdminTool(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("AngelBot Admin Tool")
-        self.geometry("560x360")
+        self.geometry("700x620")
         self.resizable(False, False)
         self.configure(fg_color=BG)
         self.transient(parent)
 
-        ctk.CTkLabel(self, text="LICENSE GENERATOR",
-                     font=ctk.CTkFont(size=22, weight="bold"),
-                     text_color=ACCENT_COLORS["Ice"]).pack(pady=(18, 4))
-        ctk.CTkLabel(self, text="HWID vom Nutzer eintragen oder eigene uebernehmen.",
-                     text_color=TEXT_MUTED).pack(pady=(0, 14))
+        tabs = ctk.CTkTabview(self, fg_color=BG, segmented_button_fg_color=PANEL,
+                              segmented_button_selected_color=ACCENT_COLORS["Ice"])
+        tabs.pack(fill="both", expand=True, padx=10, pady=10)
+        self._build_generator_tab(tabs.add("Generator"))
+        self._build_manager_tab(tabs.add("Lizenzen verwalten"))
 
-        body = ctk.CTkFrame(self, fg_color=PANEL, corner_radius=8, border_width=1, border_color=LINE)
-        body.pack(fill="both", expand=True, padx=18, pady=8)
+    def _build_generator_tab(self, parent):
+        ctk.CTkLabel(parent, text="LICENSE GENERATOR",
+                     font=ctk.CTkFont(size=22, weight="bold"),
+                     text_color=ACCENT_COLORS["Ice"]).pack(pady=(10, 4))
+        ctk.CTkLabel(parent, text="HWID vom Nutzer eintragen oder eigene uebernehmen.",
+                     text_color=TEXT_MUTED).pack(pady=(0, 10))
+
+        body = ctk.CTkFrame(parent, fg_color=PANEL, corner_radius=8, border_width=1, border_color=LINE)
+        body.pack(fill="both", expand=True, padx=12, pady=6)
 
         self.hwid_entry = ctk.CTkEntry(body, width=390)
         self.hwid_entry.insert(0, get_hwid())
-        self.hwid_entry.grid(row=0, column=1, padx=10, pady=(18, 8), sticky="ew")
-        ctk.CTkLabel(body, text="HWID", width=90, anchor="w").grid(row=0, column=0, padx=(16, 0), pady=(18, 8))
+        self.hwid_entry.grid(row=0, column=1, padx=10, pady=(14, 6), sticky="ew")
+        ctk.CTkLabel(body, text="HWID", width=90, anchor="w").grid(row=0, column=0, padx=(12, 0), pady=(14, 6))
 
         self.hours_entry = ctk.CTkEntry(body, width=120)
         self.hours_entry.insert(0, "24")
-        self.hours_entry.grid(row=1, column=1, padx=10, pady=8, sticky="w")
-        ctk.CTkLabel(body, text="Stunden", width=90, anchor="w").grid(row=1, column=0, padx=(16, 0), pady=8)
+        self.hours_entry.grid(row=1, column=1, padx=10, pady=6, sticky="w")
+        ctk.CTkLabel(body, text="Stunden", width=90, anchor="w").grid(row=1, column=0, padx=(12, 0), pady=6)
 
         quick = ctk.CTkFrame(body, fg_color="transparent")
-        quick.grid(row=1, column=1, padx=(140, 10), pady=8, sticky="w")
+        quick.grid(row=1, column=1, padx=(140, 10), pady=6, sticky="w")
         for label, hours in (("1h", 1), ("6h", 6), ("24h", 24), ("7d", 168), ("30d", 720)):
             ctk.CTkButton(quick, text=label, width=46, height=28,
                           fg_color=PANEL_3, hover_color=LINE,
                           command=lambda h=hours: self._set_hours(h)).pack(side="left", padx=3)
 
         self.output = ctk.CTkTextbox(body, height=84, font=ctk.CTkFont("Consolas", 12))
-        self.output.grid(row=2, column=0, columnspan=2, padx=16, pady=12, sticky="ew")
+        self.output.grid(row=2, column=0, columnspan=2, padx=12, pady=10, sticky="ew")
         self.output.configure(state="disabled")
 
         ctk.CTkButton(body, text="Code generieren", height=36,
                       fg_color=ACCENT_COLORS["Ice"],
-                      command=self._generate).grid(row=3, column=0, columnspan=2, padx=16, pady=(0, 12), sticky="ew")
+                      command=self._generate).grid(row=3, column=0, columnspan=2, padx=12, pady=(0, 10), sticky="ew")
         body.grid_columnconfigure(1, weight=1)
+
+    def _build_manager_tab(self, parent):
+        ctk.CTkLabel(parent, text="AKTIVE LIZENZEN",
+                     font=ctk.CTkFont(size=22, weight="bold"),
+                     text_color=ACCENT_COLORS["Ice"]).pack(pady=(10, 4))
+
+        btn_row = ctk.CTkFrame(parent, fg_color="transparent")
+        btn_row.pack(fill="x", padx=12, pady=(0, 6))
+        ctk.CTkButton(btn_row, text="Aktualisieren", width=120, height=30,
+                      fg_color=PANEL_3, hover_color=LINE,
+                      command=self._refresh_licenses).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(btn_row, text="Abgelaufene entfernen", width=160, height=30,
+                      fg_color=PANEL_3, hover_color=LINE,
+                      command=self._remove_expired).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(btn_row, text="Ausgewaehlte loeschen", width=160, height=30,
+                      fg_color="#aa3333", hover_color="#cc4444",
+                      command=self._delete_selected).pack(side="left", padx=(0, 6))
+
+        header = ctk.CTkFrame(parent, fg_color=PANEL_3, corner_radius=4)
+        header.pack(fill="x", padx=12, pady=(0, 2))
+        for col, w in (("HWID", 140), ("Code", 200), ("Erstellt", 120),
+                        ("Ablauf", 120), ("Status", 80)):
+            ctk.CTkLabel(header, text=col, width=w, anchor="w",
+                         font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=4, pady=4)
+
+        list_frame = ctk.CTkScrollableFrame(parent, fg_color=PANEL, corner_radius=8,
+                                            border_width=1, border_color=LINE)
+        list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        self._license_list_frame = list_frame
+        self._license_check_vars: list[tuple[ctk.BooleanVar, int]] = []
+
+        extend_row = ctk.CTkFrame(parent, fg_color="transparent")
+        extend_row.pack(fill="x", padx=12, pady=(0, 8))
+        ctk.CTkLabel(extend_row, text="Verlaengern um:").pack(side="left", padx=(0, 6))
+        self._extend_hours_entry = ctk.CTkEntry(extend_row, width=60)
+        self._extend_hours_entry.insert(0, "24")
+        self._extend_hours_entry.pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(extend_row, text="Stunden").pack(side="left", padx=(0, 10))
+        ctk.CTkButton(extend_row, text="Ausgewaehlte verlaengern", width=180, height=30,
+                      fg_color=ACCENT_COLORS["Ice"],
+                      command=self._extend_selected).pack(side="left")
+
+        self._refresh_licenses()
+
+    def _refresh_licenses(self):
+        for widget in self._license_list_frame.winfo_children():
+            widget.destroy()
+        self._license_check_vars.clear()
+        registry = load_license_registry()
+        now = _dt.datetime.now()
+        if not registry:
+            ctk.CTkLabel(self._license_list_frame, text="Keine Lizenzen vorhanden.",
+                         text_color=TEXT_MUTED).pack(pady=20)
+            return
+        for idx, entry in enumerate(registry):
+            row = ctk.CTkFrame(self._license_list_frame, fg_color="transparent")
+            row.pack(fill="x", pady=1)
+            var = ctk.BooleanVar(value=False)
+            self._license_check_vars.append((var, idx))
+            ctk.CTkCheckBox(row, text="", variable=var, width=24,
+                            checkbox_width=18, checkbox_height=18).pack(side="left", padx=(4, 2))
+            hwid_text = entry.get("hwid", "?")[:16]
+            ctk.CTkLabel(row, text=hwid_text, width=132, anchor="w",
+                         font=ctk.CTkFont("Consolas", 11)).pack(side="left", padx=2)
+            code_text = entry.get("code", "?")
+            if len(code_text) > 28:
+                code_text = code_text[:28] + ".."
+            ctk.CTkLabel(row, text=code_text, width=196, anchor="w",
+                         font=ctk.CTkFont("Consolas", 11)).pack(side="left", padx=2)
+            ctk.CTkLabel(row, text=entry.get("created_str", "?"), width=116,
+                         anchor="w").pack(side="left", padx=2)
+            ctk.CTkLabel(row, text=entry.get("expiry_str", "?"), width=116,
+                         anchor="w").pack(side="left", padx=2)
+            try:
+                exp = _dt.datetime.strptime(entry.get("expiry_str", ""), "%Y-%m-%d %H:%M")
+                status = "Aktiv" if exp > now else "Abgelaufen"
+                color = "#44bb44" if exp > now else "#bb4444"
+            except (ValueError, TypeError):
+                status = "?"
+                color = TEXT_MUTED
+            ctk.CTkLabel(row, text=status, width=76, anchor="w",
+                         text_color=color).pack(side="left", padx=2)
+
+    def _delete_selected(self):
+        registry = load_license_registry()
+        indices_to_delete = {idx for var, idx in self._license_check_vars if var.get()}
+        if not indices_to_delete:
+            return
+        registry = [e for i, e in enumerate(registry) if i not in indices_to_delete]
+        save_license_registry(registry)
+        self._refresh_licenses()
+
+    def _remove_expired(self):
+        registry = load_license_registry()
+        now = _dt.datetime.now()
+        kept = []
+        for entry in registry:
+            try:
+                exp = _dt.datetime.strptime(entry.get("expiry_str", ""), "%Y-%m-%d %H:%M")
+                if exp > now:
+                    kept.append(entry)
+            except (ValueError, TypeError):
+                kept.append(entry)
+        save_license_registry(kept)
+        self._refresh_licenses()
+
+    def _extend_selected(self):
+        try:
+            extra_hours = int(self._extend_hours_entry.get().strip())
+        except ValueError:
+            extra_hours = 24
+        registry = load_license_registry()
+        indices_to_extend = {idx for var, idx in self._license_check_vars if var.get()}
+        if not indices_to_extend:
+            return
+        for idx in indices_to_extend:
+            if idx >= len(registry):
+                continue
+            entry = registry[idx]
+            try:
+                old_exp = _dt.datetime.strptime(entry.get("expiry_str", ""), "%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                old_exp = _dt.datetime.now()
+            new_exp = old_exp + _dt.timedelta(hours=extra_hours)
+            entry["expiry_str"] = new_exp.strftime("%Y-%m-%d %H:%M")
+            hwid = entry.get("hwid", "ANY")
+            entry["hours"] = entry.get("hours", 0) + extra_hours
+            new_code = generate_license_code(hwid, int((new_exp - _dt.datetime.now()).total_seconds() / 3600) + 1)
+            entry["code"] = new_code
+        save_license_registry(registry)
+        self._refresh_licenses()
 
     def _generate(self):
         try:
             hours = int(self.hours_entry.get().strip())
         except ValueError:
             hours = 24
-        code = generate_license_code(self.hwid_entry.get().strip(), hours)
+        hwid = self.hwid_entry.get().strip()
+        code = generate_license_code(hwid, hours)
+        register_license(code, hwid, hours)
         self.output.configure(state="normal")
         self.output.delete("0.0", "end")
         self.output.insert("end", code)
@@ -907,22 +1082,9 @@ class FishingBotGUI(ctk.CTk):
 
         ctk.CTkLabel(
             parent, justify="left", anchor="w",
-            text=("Scan-Bereich: Region in der nach roten Zielen gesucht wird.\n"
-                  "F1 = Waffentraining Start/Stop"),
+            text=("Scannt den gesamten Bildschirm nach roten Zielen.\n"
+                  "F1 = Waffentraining Start/Stop | Schuss = Rechtsklick"),
         ).pack(fill="x", padx=10, pady=(4, 4))
-
-        self._slider_row(parent, "Scan X1", self.cfg.wt_scan_x1,
-                         0, max(1, self.cfg.screen_w),
-                         lambda v: self._set_cfg("wt_scan_x1", int(v)))
-        self._slider_row(parent, "Scan Y1", self.cfg.wt_scan_y1,
-                         0, max(1, self.cfg.screen_h),
-                         lambda v: self._set_cfg("wt_scan_y1", int(v)))
-        self._slider_row(parent, "Scan X2", self.cfg.wt_scan_x2,
-                         0, max(1, self.cfg.screen_w),
-                         lambda v: self._set_cfg("wt_scan_x2", int(v)))
-        self._slider_row(parent, "Scan Y2", self.cfg.wt_scan_y2,
-                         0, max(1, self.cfg.screen_h),
-                         lambda v: self._set_cfg("wt_scan_y2", int(v)))
 
         self._slider_row(parent, "Farb-Toleranz", self.cfg.wt_threshold,
                          5, 150,

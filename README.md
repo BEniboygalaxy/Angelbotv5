@@ -29,6 +29,7 @@ Automatisierter Minecraft Fishing-Bot mit integriertem **Waffentraining-Modul** 
 - **Waffentraining-Bot**: Automatisches Erkennen und Treffen roter Ziele im Waffentraining-Minigame
 - **Captcha-Erkennung**: Automatische OCR-basierte Captcha-Loesung (optional, benoetigt Tesseract)
 - **Live-Preview**: Echtzeit-Visualisierung der Bar- und Captcha-Erkennung
+- **Lizenz-Verwaltung**: Admin-Panel zum Generieren, Anzeigen, Verlaengern und Loeschen von Lizenzcodes
 - **Profil-System**: Mehrere Konfigurationsprofile speicherbar
 - **Hotkey-System**: Alle Funktionen per Hotkey steuerbar (anpassbar)
 - **HUD/Overlay**: In-Game Overlay mit Status-Anzeige
@@ -121,12 +122,11 @@ Captcha-Erkennung und automatische Eingabe.
 
 ### Waffentraining (NEU)
 
-Automatisierung des Waffentraining-Minigames. Erkennt rote Ziele auf dem Bildschirm, bewegt die Maus dorthin und klickt.
+Automatisierung des Waffentraining-Minigames. Scannt den **gesamten Bildschirm** nach roten Zielen, bewegt die Maus dorthin und schiesst per **Rechtsklick**.
 
 | Einstellung | Beschreibung | Empfohlen fuer 100% |
 |---|---|---|
 | **Waffentraining aktivieren** | Feature ein/aus | AN |
-| **Scan X1/Y1, X2/Y2** | Scan-Bereich in dem nach Zielen gesucht wird | Genau um den Spielbereich legen |
 | **Farb-Toleranz** | Wie stark die Farbe vom Ziel-Rot abweichen darf | 40-80 |
 | **Min. Pixel** | Mindestanzahl roter Pixel damit ein Ziel zaehlt | 20-50 |
 | **Schuss-Delay (s)** | Wartezeit nach jedem Schuss (fuer Animation/Nachladen) | 0.05-0.15 |
@@ -146,11 +146,11 @@ Automatisierung des Waffentraining-Minigames. Erkennt rote Ziele auf dem Bildsch
 
 ### So erreichst du 100% Treffergenauigkeit:
 
-#### 1. Scan-Bereich praezise einstellen
+#### 1. Bildschirm-Scan
 
-Der Scan-Bereich (X1/Y1 bis X2/Y2) muss **genau** den Spielbereich abdecken, in dem die roten Ziele erscheinen. Zu gross = mehr False Positives, zu klein = Ziele werden verpasst.
+Der Bot scannt automatisch den **gesamten Bildschirm** nach roten Zielen. Es ist kein manuelles Einstellen eines Scan-Bereichs noetig.
 
-**Tipp:** Starte das Minigame einmal manuell und beobachte, wo die Ziele erscheinen. Stelle den Scan-Bereich so ein, dass er diesen Bereich genau abdeckt.
+**Tipp:** Stelle sicher, dass keine anderen roten UI-Elemente sichtbar sind, die als Ziel erkannt werden koennten.
 
 #### 2. HSV-Modus verwenden
 
@@ -199,7 +199,7 @@ Instant-Aim:                AN
 4. **Groesstes Ziel**: Das groesste zusammenhaengende rote Objekt wird als Ziel gewaehlt
 5. **Mittelpunkt berechnen**: Der Schwerpunkt (Moment) des Ziels wird berechnet
 6. **Maus bewegen**: Die Maus wird zum Zielmittelpunkt bewegt (Instant oder interpoliert)
-7. **Schuss**: Linksklick wird ausgefuehrt
+7. **Schuss**: Rechtsklick wird ausgefuehrt
 8. **Delay**: Kurze Wartezeit fuer Nachladen/Animation
 9. **Zurueck zu Schritt 1**
 
@@ -332,6 +332,7 @@ quit = f12
 | `_build_tab_wt()` | **NEU**: Waffentraining-Einstellungen (Scan-Bereich, Farbe, Timing, HSV) |
 | `_build_tab_hud()` | HUD/Overlay-Einstellungen |
 | `LicenseGate` | Lizenz-Abfrage beim Start |
+| `AdminTool` | **ERWEITERT**: Lizenz-Generator + Lizenz-Verwaltung (Anzeigen, Loeschen, Verlaengern) |
 | `ScanOverlay` | In-Game Overlay |
 | `HotkeyEditor` | Hotkey-Anpassung |
 
@@ -339,7 +340,7 @@ quit = f12
 
 ```
 wt_detect_target(cfg, sct):
-  1. Screenshot des Scan-Bereichs (cfg.wt_scan_x1..x2, y1..y2)
+  1. Screenshot des gesamten Bildschirms
   2. Konvertierung zu HSV (oder RGB falls HSV deaktiviert)
   3. Farbmaske erstellen:
      - HSV: Zwei Bereiche fuer Rot (H: 0-10 UND H: 160-180)
@@ -352,7 +353,7 @@ wt_detect_target(cfg, sct):
 wt_move_and_shoot(cfg, target_x, target_y):
   1. Maus zum Ziel bewegen (SetCursorPos oder pydirectinput.moveTo)
   2. Kurze Pause (aim_settle_ms) damit Spiel Position registriert
-  3. Linksklick ausfuehren
+  3. Rechtsklick ausfuehren (mit konfigurierbarer Hold-Dauer)
 ```
 
 ---
@@ -362,14 +363,13 @@ wt_move_and_shoot(cfg, target_x, target_y):
 ### Waffentraining erkennt keine Ziele
 
 1. **Debug-Modus aktivieren** (F5) und Log pruefen
-2. **Scan-Bereich pruefen**: Stimmen X1/Y1 und X2/Y2?
-3. **HSV-Werte anpassen**: S Min und V Min reduzieren
+2. **HSV-Werte anpassen**: S Min und V Min reduzieren
 4. **Min. Pixel reduzieren**: Auf 10-20 setzen
 5. **Farb-Toleranz erhoehen**: Auf 80-100
 
 ### Waffentraining erkennt zu viel (False Positives)
 
-1. **Scan-Bereich verkleinern**: Nur den Spielbereich abdecken
+1. **Andere rote UI-Elemente ausblenden** falls moeglich
 2. **Min. Pixel erhoehen**: Auf 80-150
 3. **HSV S Min erhoehen**: Auf 120-150
 4. **Farb-Toleranz reduzieren**: Auf 30-40
@@ -392,3 +392,25 @@ wt_move_and_shoot(cfg, target_x, target_y):
 - Spiel im **Fenstermodus** oder **Randlos-Fenster** spielen (kein Vollbild)
 - Bot als **Administrator** starten falls Klicks nicht registriert werden
 - **Anti-Virus** kann pydirectinput blockieren - Ausnahme hinzufuegen
+
+---
+
+## Admin-Panel: Lizenzverwaltung
+
+Das Admin-Panel (erreichbar ueber den Admin-Login) hat jetzt zwei Tabs:
+
+### Generator
+Wie bisher: HWID eingeben, Stunden waehlen, Code generieren. Generierte Codes werden automatisch in der Lizenz-Registry gespeichert.
+
+### Lizenzen verwalten
+
+| Funktion | Beschreibung |
+|---|---|
+| **Aktualisieren** | Liste der Lizenzen neu laden |
+| **Abgelaufene entfernen** | Alle abgelaufenen Lizenzen automatisch loeschen |
+| **Ausgewaehlte loeschen** | Markierte Lizenzen loeschen |
+| **Ausgewaehlte verlaengern** | Markierte Lizenzen um X Stunden verlaengern (neuer Code wird generiert) |
+
+Jede Lizenz zeigt: HWID, Code, Erstellungsdatum, Ablaufdatum und Status (Aktiv/Abgelaufen).
+
+Die Lizenz-Registry wird unter `%APPDATA%/AngelBot_v3/license_registry.json` gespeichert.
