@@ -1,4 +1,4 @@
-# AngelBot V5 - Fishing Bot + Waffentraining
+# AngelBot V5 - Fishing Bot
 
 Automatisierter Minecraft Fishing-Bot mit integriertem **Waffentraining-Modul** fuer 100% Treffergenauigkeit.
 
